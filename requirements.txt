@@ -1,0 +1,21 @@
+# PMCC Bot Dependencies
+
+# Core
+python-dotenv==1.0.0
+
+# API & HTTP
+requests==2.31.0
+
+# Database
+# SQLite is included in Python standard library
+
+# Telegram Bot
+python-telegram-bot==20.7
+
+# Scheduling
+schedule==1.2.0
+pytz==2023.3
+
+# Development
+pytest==7.4.3
+pytest-asyncio==0.21.1

@@ -1,0 +1,28 @@
+# Systemd service file for PMCC Bot
+# Copy to /etc/systemd/system/pmcc-bot.service
+# Then run: sudo systemctl enable pmcc-bot && sudo systemctl start pmcc-bot
+
+[Unit]
+Description=PMCC Trading Bot
+After=network.target
+
+[Service]
+Type=simple
+User=your_username
+WorkingDirectory=/path/to/pmcc-bot
+Environment="PATH=/path/to/pmcc-bot/venv/bin"
+ExecStart=/path/to/pmcc-bot/venv/bin/python main.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/pmcc-bot/output.log
+StandardError=append:/var/log/pmcc-bot/error.log
+
+# Security hardening (optional)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/path/to/pmcc-bot
+
+[Install]
+WantedBy=multi-user.target
