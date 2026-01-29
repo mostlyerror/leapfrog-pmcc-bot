@@ -54,31 +54,29 @@ class PMCCBot:
 
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Help command"""
-        help_text = """
-📚 *PMCC Bot Commands*
+        help_text = """📚 PMCC Bot Commands
 
-📊 *Position Management*
+📊 Position Management
 /positions - Show current positions
 /add_leaps <symbol> <strike> <exp> <price> <qty> - Add LEAPS
 /add_short <leaps_id> <symbol> <strike> <exp> <price> <qty> - Add short call
 
-🔔 *Monitoring*
+🔔 Monitoring
 /alerts - Show active alert thresholds
 /summary - Get cost basis summary
 
-🔍 *Scanning*
+🔍 Scanning
 /roll <short_call_id> - Get roll candidates
 /newcall <leaps_id> - Get new short call candidates
 
-💰 *Trading*
+💰 Trading
 /close <short_call_id> <exit_price> - Log closed short call
 
-*Examples:*
+Examples:
 /add_leaps SPY 620 2027-01-17 109.00 2
 /add_short 1 SPY 730 2026-03-21 6.50 2
-/close 1 3.25
-        """
-        await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
+/close 1 3.25"""
+        await update.message.reply_text(help_text)
 
     async def cmd_positions(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show current positions"""
