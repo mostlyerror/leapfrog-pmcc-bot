@@ -363,3 +363,12 @@ After deployment, you should see:
 **Deployed By:** _Your Name_
 **Railway Project:** pmcc-bot
 **Database:** PostgreSQL (Railway-managed)
+
+## Auto-Deployment Status
+
+✅ Connected to GitHub repository
+✅ Auto-deployments enabled
+✅ Deploys automatically on push to main branch
+
+Railway will now automatically deploy whenever you push changes to the main branch.
+
