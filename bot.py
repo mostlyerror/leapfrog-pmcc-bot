@@ -59,26 +59,26 @@ class PMCCBot:
 
 📊 *Position Management*
 /positions - Show current positions
-/add\\_leaps <symbol> <strike> <exp> <price> <qty> - Add LEAPS
-/add\\_short <leaps\\_id> <symbol> <strike> <exp> <price> <qty> - Add short call
+/add_leaps <symbol> <strike> <exp> <price> <qty> - Add LEAPS
+/add_short <leaps_id> <symbol> <strike> <exp> <price> <qty> - Add short call
 
 🔔 *Monitoring*
 /alerts - Show active alert thresholds
 /summary - Get cost basis summary
 
 🔍 *Scanning*
-/roll <short\\_call\\_id> - Get roll candidates
-/newcall <leaps\\_id> - Get new short call candidates
+/roll <short_call_id> - Get roll candidates
+/newcall <leaps_id> - Get new short call candidates
 
 💰 *Trading*
-/close <short\\_call\\_id> <exit\\_price> - Log closed short call
+/close <short_call_id> <exit_price> - Log closed short call
 
 *Examples:*
-`/add_leaps SPY 620 2027-01-17 109.00 2`
-`/add_short 1 SPY 730 2026-03-21 6.50 2`
-`/close 1 3.25`
+/add_leaps SPY 620 2027-01-17 109.00 2
+/add_short 1 SPY 730 2026-03-21 6.50 2
+/close 1 3.25
         """
-        await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN_V2)
+        await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
     async def cmd_positions(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show current positions"""
