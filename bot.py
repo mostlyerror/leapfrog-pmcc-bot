@@ -43,6 +43,7 @@ class PMCCBot:
         self.app.add_handler(CommandHandler("add_leaps", self.cmd_add_leaps))
         self.app.add_handler(CommandHandler("add_short", self.cmd_add_short))
         self.app.add_handler(CommandHandler("summary", self.cmd_summary))
+        self.app.add_handler(CommandHandler("clear", self.cmd_clear))
 
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Start command"""
@@ -60,6 +61,7 @@ class PMCCBot:
 /positions - Show current positions
 /add_leaps <symbol> <strike> <exp> <price> <qty> - Add LEAPS
 /add_short <leaps_id> <symbol> <strike> <exp> <price> <qty> - Add short call
+/clear confirm - Delete ALL positions (requires confirm)
 
 🔔 Monitoring
 /alerts - Show active alert thresholds
@@ -250,6 +252,42 @@ Examples:
     async def cmd_summary(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Get cost basis summary"""
         await self.send_daily_summary()
+
+    async def cmd_clear(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Clear all positions (destructive - use with caution)"""
+        # Require confirmation
+        if not context.args or context.args[0].lower() != "confirm":
+            await update.message.reply_text(
+                "⚠️ WARNING: This will delete ALL positions, short calls, alerts, and cost basis history.\n\n"
+                "To proceed, use: /clear confirm"
+            )
+            return
+
+        try:
+            with self.db.get_connection() as conn:
+                if self.db.db_type == "postgresql":
+                    with conn.cursor() as cursor:
+                        cursor.execute("DELETE FROM cost_basis_history")
+                        cursor.execute("DELETE FROM alerts")
+                        cursor.execute("DELETE FROM short_calls")
+                        cursor.execute("DELETE FROM leaps")
+                        conn.commit()
+                else:
+                    conn.execute("DELETE FROM cost_basis_history")
+                    conn.execute("DELETE FROM alerts")
+                    conn.execute("DELETE FROM short_calls")
+                    conn.execute("DELETE FROM leaps")
+                    conn.commit()
+
+            await update.message.reply_text(
+                "✅ All positions cleared.\n\n"
+                "Database is now empty and ready for real positions."
+            )
+            logger.info("All positions cleared via /clear command")
+
+        except Exception as e:
+            await update.message.reply_text(f"❌ Error clearing positions: {e}")
+            logger.error(f"Error clearing positions: {e}")
 
     async def send_alert(self, message: str):
         """Send alert to Telegram"""
