@@ -17,6 +17,9 @@ python-telegram-bot==20.7
 schedule==1.2.0
 pytz==2023.3
 
+# Natural Language Processing
+dateparser==1.2.0
+
 # Development & Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1

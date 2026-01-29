@@ -13,6 +13,10 @@ from tradier import TradierAPI
 from alerts import AlertMonitor
 from scanner import OptionScanner
 import config
+from conversational.intent_recognizer import IntentRecognizer
+from conversational.entity_extractor import EntityExtractor
+from conversational.conversation_state import ConversationStateManager
+from conversational.parameter_collector import ParameterCollector
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,12 @@ class PMCCBot:
         self.short_call_model = ShortCall(db)
         self.alert_monitor = AlertMonitor(db, api)
         self.scanner = OptionScanner(db, api)
+
+        # Conversational interface
+        self.intent_recognizer = IntentRecognizer()
+        self.entity_extractor = EntityExtractor()
+        self.conversation_state = ConversationStateManager()
+        self.param_collector = ParameterCollector()
 
         self.app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
         self._register_handlers()
@@ -44,6 +54,15 @@ class PMCCBot:
         self.app.add_handler(CommandHandler("add_short", self.cmd_add_short))
         self.app.add_handler(CommandHandler("summary", self.cmd_summary))
         self.app.add_handler(CommandHandler("clear", self.cmd_clear))
+
+        # Register message handler for conversational input
+        # This should be last so command handlers take precedence
+        self.app.add_handler(
+            MessageHandler(
+                filters.TEXT & ~filters.COMMAND,
+                self.handle_conversational_message
+            )
+        )
 
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Start command"""
@@ -288,6 +307,199 @@ Examples:
         except Exception as e:
             await update.message.reply_text(f"❌ Error clearing positions: {e}")
             logger.error(f"Error clearing positions: {e}")
+
+    async def handle_conversational_message(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        """Handle natural language messages"""
+        user_id = update.effective_user.id
+        text = update.message.text
+
+        # Check if user has active conversation
+        if self.conversation_state.is_active(user_id):
+            # Continue existing conversation
+            await self._continue_conversation(update, context, user_id, text)
+        else:
+            # Try to recognize new intent
+            intent, confidence = self.intent_recognizer.recognize(text)
+
+            if intent and confidence > 0.7:
+                # Start new conversation
+                await self._start_conversation(update, context, user_id, intent, text)
+            else:
+                # Couldn't understand
+                await update.message.reply_text(
+                    "I'm not sure what you want to do. Try using /help to see available commands."
+                )
+
+    async def _start_conversation(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE,
+        user_id: int, intent: str, text: str
+    ):
+        """Start a new conversational command"""
+        # Extract entities from initial message
+        entities = self.entity_extractor.extract(text)
+
+        # Start conversation state
+        self.conversation_state.start_conversation(user_id, intent)
+
+        # Map generic 'id' to specific parameter based on intent
+        if 'id' in entities:
+            if intent == 'close' or intent == 'roll':
+                entities['short_call_id'] = entities.pop('id')
+            elif intent == 'newcall':
+                entities['leaps_id'] = entities.pop('id')
+            elif intent == 'add_short':
+                entities['leaps_id'] = entities.pop('id')
+
+        # Map generic 'price' to 'exit_price' for close intent
+        if intent == 'close' and 'price' in entities:
+            entities['exit_price'] = entities.pop('price')
+
+        # Update with extracted entities
+        if entities:
+            self.conversation_state.update_params(user_id, entities)
+
+        # Check if we have everything we need
+        if self.conversation_state.is_complete(user_id):
+            await self._execute_intent(update, context, user_id)
+        else:
+            # Ask for missing params
+            missing = self.conversation_state.get_missing_params(user_id)
+            prompt = self.param_collector.format_missing_params_message(intent, missing)
+            await update.message.reply_text(prompt)
+
+    async def _continue_conversation(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE,
+        user_id: int, text: str
+    ):
+        """Continue an existing conversation"""
+        # Get current intent to properly map entities
+        intent = self.conversation_state.get_intent(user_id)
+        missing = self.conversation_state.get_missing_params(user_id)
+
+        # Extract entities from message
+        entities = self.entity_extractor.extract(text)
+
+        # Map generic 'id' to specific parameter based on what's missing
+        if 'id' in entities:
+            if 'short_call_id' in missing:
+                entities['short_call_id'] = entities.pop('id')
+            elif 'leaps_id' in missing:
+                entities['leaps_id'] = entities.pop('id')
+
+        # Map generic 'price' to 'exit_price' if that's what's missing
+        if 'price' in entities and 'exit_price' in missing:
+            entities['exit_price'] = entities.pop('price')
+
+        # Update conversation state
+        if entities:
+            self.conversation_state.update_params(user_id, entities)
+
+        # Check if complete
+        if self.conversation_state.is_complete(user_id):
+            await self._execute_intent(update, context, user_id)
+        else:
+            # Still missing params
+            intent = self.conversation_state.get_intent(user_id)
+            missing = self.conversation_state.get_missing_params(user_id)
+            prompt = self.param_collector.format_missing_params_message(intent, missing)
+            await update.message.reply_text(prompt)
+
+    async def _execute_intent(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int
+    ):
+        """Execute the command once all params are collected"""
+        intent = self.conversation_state.get_intent(user_id)
+        params = self.conversation_state.get_collected_params(user_id)
+
+        # Clear conversation state
+        self.conversation_state.clear_conversation(user_id)
+
+        # Map to existing command handlers
+        try:
+            if intent == 'add_leaps':
+                await self._execute_add_leaps(update, params)
+            elif intent == 'add_short':
+                await self._execute_add_short(update, params)
+            elif intent == 'close':
+                await self._execute_close(update, params)
+            elif intent == 'roll':
+                context.args = [str(params['short_call_id'])]
+                await self.cmd_roll(update, context)
+            elif intent == 'newcall':
+                context.args = [str(params['leaps_id'])]
+                await self.cmd_newcall(update, context)
+            elif intent == 'positions':
+                await self.cmd_positions(update, context)
+            elif intent == 'summary':
+                await self.cmd_summary(update, context)
+            elif intent == 'help':
+                await self.cmd_help(update, context)
+        except Exception as e:
+            await update.message.reply_text(f"Error executing command: {e}")
+            logger.error(f"Error in conversational execution: {e}")
+
+    async def _execute_add_leaps(self, update: Update, params: dict):
+        """Execute add_leaps with collected params"""
+        try:
+            leaps_id = self.leaps_model.add(
+                params['symbol'],
+                params['strike'],
+                params['expiration'],
+                params['price'],
+                params['quantity']
+            )
+
+            await update.message.reply_text(
+                f"✅ LEAPS added (ID: {leaps_id})\n"
+                f"{params['symbol']} ${params['strike']:.0f}C exp {params['expiration']}\n"
+                f"Cost: ${params['price']:.2f} × {params['quantity']}"
+            )
+        except Exception as e:
+            await update.message.reply_text(f"Error adding LEAPS: {e}")
+
+    async def _execute_add_short(self, update: Update, params: dict):
+        """Execute add_short with collected params"""
+        try:
+            short_id = self.short_call_model.add(
+                params['leaps_id'],
+                params['symbol'],
+                params['strike'],
+                params['expiration'],
+                params['price'],
+                params['quantity']
+            )
+
+            await update.message.reply_text(
+                f"✅ Short call added (ID: {short_id})\n"
+                f"{params['symbol']} ${params['strike']:.0f}C exp {params['expiration']}\n"
+                f"Credit: ${params['price']:.2f} × {params['quantity']}"
+            )
+        except Exception as e:
+            await update.message.reply_text(f"Error adding short call: {e}")
+
+    async def _execute_close(self, update: Update, params: dict):
+        """Execute close with collected params"""
+        try:
+            profit = self.short_call_model.close(
+                params['short_call_id'],
+                params['exit_price']
+            )
+
+            position = self.short_call_model.get_by_id(params['short_call_id'])
+            adjusted_cost = self.leaps_model.get_adjusted_cost_basis(position['leaps_id'])
+
+            output = "✅ *Short Call Closed*\n\n"
+            output += f"Position: {position['symbol']}\n"
+            output += f"Entry: ${position['entry_price']:.2f} | Exit: ${params['exit_price']:.2f}\n"
+            output += f"Profit: ${profit:.2f}\n\n"
+            output += f"*Updated Cost Basis*\n"
+            output += f"LEAPS adjusted basis: ${adjusted_cost:.2f}/contract"
+
+            await update.message.reply_text(output, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            await update.message.reply_text(f"Error closing position: {e}")
 
     async def send_alert(self, message: str):
         """Send alert to Telegram"""
