@@ -4,13 +4,27 @@ Configuration management for PMCC Bot
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import logging
 
 # Load environment variables
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 # Base directories
 BASE_DIR = Path(__file__).parent
-DB_PATH = BASE_DIR / "pmcc.db"
+
+# Database Configuration
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+
+if DATABASE_URL:
+    # Production: PostgreSQL from Railway
+    DB_TYPE = "postgresql"
+    DB_PATH = None
+else:
+    # Development: SQLite
+    DB_TYPE = "sqlite"
+    DB_PATH = BASE_DIR / "pmcc.db"
 
 # API Configuration
 TRADIER_API_KEY = os.getenv("TRADIER_API_KEY", "")
@@ -66,5 +80,11 @@ def validate_config():
 
     if errors:
         raise ValueError(f"Configuration errors: {', '.join(errors)}")
+
+    # Log database configuration
+    if DATABASE_URL:
+        logger.info("Using PostgreSQL database")
+    else:
+        logger.info(f"Using SQLite database at {DB_PATH}")
 
     return True

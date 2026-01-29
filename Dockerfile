@@ -11,11 +11,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY . .
 
-# Create volume for database persistence
-VOLUME ["/app/data"]
-
-# Set environment variable for database path
-ENV DB_PATH=/app/data/pmcc.db
-
 # Run the bot
 CMD ["python", "main.py"]

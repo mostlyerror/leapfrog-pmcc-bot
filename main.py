@@ -146,9 +146,21 @@ def main():
         config.validate_config()
         logger.info("Configuration validated")
 
-        # Initialize database
-        db = Database(config.DB_PATH)
+        # Initialize database with connection string or path
+        if config.DATABASE_URL:
+            db = Database(config.DATABASE_URL)
+        else:
+            db = Database(config.DB_PATH)
         logger.info("Database initialized")
+
+        # Test database connection
+        try:
+            with db.get_connection() as conn:
+                pass
+            logger.info("Database connection verified")
+        except Exception as e:
+            logger.error(f"Database connection failed: {e}")
+            raise
 
         # Seed example data (only if database is empty)
         seed_example_data(db)
